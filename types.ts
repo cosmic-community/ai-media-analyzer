@@ -63,7 +63,7 @@ export interface AnalysisResult {
 export interface FileDropzoneProps {
   onFileSelect: (file: File) => void;
   isUploading: boolean;
-  uploadedFile?: MediaObject;
+  uploadedFile?: MediaObject | null; // Changed: Allow both null and undefined
 }
 
 export interface AnalysisFormProps {

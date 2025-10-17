@@ -11,7 +11,8 @@ export default function FileDropzone({
   uploadedFile 
 }: FileDropzoneProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
+    // Changed: Add proper bounds checking for array access
+    if (acceptedFiles.length > 0 && acceptedFiles[0]) {
       onFileSelect(acceptedFiles[0])
     }
   }, [onFileSelect])
