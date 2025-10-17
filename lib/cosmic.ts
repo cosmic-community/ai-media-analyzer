@@ -1,77 +1,89 @@
-import { createBucketClient } from '@cosmicjs/sdk'
-import { MediaObject, AITextResponse, isCosmicError } from '@/types'
-
-export const cosmic = createBucketClient({
-  bucketSlug: process.env.COSMIC_BUCKET_SLUG as string,
-  readKey: process.env.COSMIC_READ_KEY as string,
-  writeKey: process.env.COSMIC_WRITE_KEY as string,
-})
+import { MediaObject, AITextResponse } from '@/types'
 
 /**
- * Upload a file to Cosmic media library
+ * Upload a file to Cosmic media library via API route
  */
 export async function uploadMedia(file: File): Promise<MediaObject> {
   try {
-    const response = await cosmic.media.insertOne({
-      media: file,
-      folder: 'ai-uploads',
-      metadata: {
-        uploaded_by: 'ai-analyzer',
-        upload_timestamp: new Date().toISOString(),
-      }
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
     })
-    
-    return response.media as MediaObject
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Upload failed')
+    }
+
+    return data.media as MediaObject
   } catch (error) {
     console.error('Error uploading media:', error)
-    if (isCosmicError(error)) {
-      throw new Error(`Upload failed: ${error.message}`)
-    }
-    throw new Error('Failed to upload media')
+    throw new Error(error instanceof Error ? error.message : 'Failed to upload media')
   }
 }
 
 /**
- * Analyze media using Cosmic AI
+ * Analyze media using Cosmic AI via API route
  */
 export async function analyzeMedia(
   mediaUrl: string, 
   prompt: string
 ): Promise<AITextResponse> {
   try {
-    const response = await cosmic.ai.generateText({
-      prompt,
-      media_url: mediaUrl,
-      max_tokens: 1000
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mediaUrl,
+        prompt,
+      }),
     })
-    
-    return response as AITextResponse
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Analysis failed')
+    }
+
+    return data.analysis as AITextResponse
   } catch (error) {
     console.error('Error analyzing media:', error)
-    if (isCosmicError(error)) {
-      throw new Error(`Analysis failed: ${error.message}`)
-    }
-    throw new Error('Failed to analyze media')
+    throw new Error(error instanceof Error ? error.message : 'Failed to analyze media')
   }
 }
 
 /**
- * Generate text with Cosmic AI (no media)
+ * Generate text with Cosmic AI (no media) via API route
  */
 export async function generateText(prompt: string): Promise<AITextResponse> {
   try {
-    const response = await cosmic.ai.generateText({
-      prompt,
-      max_tokens: 500
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mediaUrl: null,
+        prompt,
+      }),
     })
-    
-    return response as AITextResponse
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Text generation failed')
+    }
+
+    return data.analysis as AITextResponse
   } catch (error) {
     console.error('Error generating text:', error)
-    if (isCosmicError(error)) {
-      throw new Error(`Text generation failed: ${error.message}`)
-    }
-    throw new Error('Failed to generate text')
+    throw new Error(error instanceof Error ? error.message : 'Failed to generate text')
   }
 }
 
