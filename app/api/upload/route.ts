@@ -51,9 +51,17 @@ export async function POST(request: NextRequest) {
       bucketSlug: process.env.COSMIC_BUCKET_SLUG
     })
 
-    // Upload to Cosmic media library
+    // Convert File to Buffer for Cosmic SDK
+    const buffer = Buffer.from(await file.arrayBuffer())
+    
+    // Create a proper file-like object for the Cosmic SDK
+    const fileForUpload = new File([buffer], file.name, {
+      type: file.type,
+    })
+
+    // Upload to Cosmic media library with proper file handling
     const response = await cosmic.media.insertOne({
-      media: file,
+      media: fileForUpload,
       folder: 'ai-uploads',
       metadata: {
         uploaded_by: 'ai-analyzer',
@@ -107,10 +115,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle file processing errors
-    if (error instanceof Error && error.message.includes('FormData')) {
+    if (error instanceof Error && (error.message.includes('FormData') || error.message.includes('e.on is not a function'))) {
       return NextResponse.json(
         { 
-          error: 'File processing error',
+          error: 'File processing error - invalid file format or corrupted file',
           details: error.message,
           type: 'file_processing_error'
         },
