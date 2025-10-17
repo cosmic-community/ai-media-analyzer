@@ -28,6 +28,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate environment variables
+    if (!process.env.COSMIC_BUCKET_SLUG || !process.env.COSMIC_READ_KEY || !process.env.COSMIC_WRITE_KEY) {
+      console.error('Missing environment variables:', {
+        bucketSlug: !!process.env.COSMIC_BUCKET_SLUG,
+        readKey: !!process.env.COSMIC_READ_KEY,
+        writeKey: !!process.env.COSMIC_WRITE_KEY
+      })
+      return NextResponse.json(
+        { 
+          error: 'Server configuration error: Missing required environment variables',
+          details: 'COSMIC_BUCKET_SLUG, COSMIC_READ_KEY, or COSMIC_WRITE_KEY not configured'
+        },
+        { status: 500 }
+      )
+    }
+
+    console.log('Attempting to upload file:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      bucketSlug: process.env.COSMIC_BUCKET_SLUG
+    })
+
     // Upload to Cosmic media library
     const response = await cosmic.media.insertOne({
       media: file,
@@ -38,21 +61,71 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    console.log('Upload successful:', response.media.name)
+
     const media = response.media as MediaObject
 
     return NextResponse.json({ media })
   } catch (error) {
-    console.error('Error uploading media:', error)
+    console.error('Detailed upload error:', {
+      error: error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    })
     
+    // Handle Cosmic-specific errors
     if (isCosmicError(error)) {
+      const errorDetails = {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+      }
+      
+      console.error('Cosmic API error details:', errorDetails)
+      
       return NextResponse.json(
-        { error: `Upload failed: ${error.message}` },
-        { status: 500 }
+        { 
+          error: `Cosmic API error: ${error.message}`,
+          details: errorDetails,
+          type: 'cosmic_api_error'
+        },
+        { status: error.status || 500 }
       )
     }
 
+    // Handle network/connection errors
+    if (error instanceof Error && error.message.includes('fetch')) {
+      return NextResponse.json(
+        { 
+          error: 'Network error while connecting to Cosmic API',
+          details: error.message,
+          type: 'network_error'
+        },
+        { status: 503 }
+      )
+    }
+
+    // Handle file processing errors
+    if (error instanceof Error && error.message.includes('FormData')) {
+      return NextResponse.json(
+        { 
+          error: 'File processing error',
+          details: error.message,
+          type: 'file_processing_error'
+        },
+        { status: 400 }
+      )
+    }
+
+    // Generic error with full details for debugging
     return NextResponse.json(
-      { error: 'Failed to upload media' },
+      { 
+        error: 'Upload failed with server error',
+        details: error instanceof Error ? error.message : 'Unknown error occurred',
+        type: 'server_error',
+        stack: error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     )
   }

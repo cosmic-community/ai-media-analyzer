@@ -5,6 +5,12 @@ import { MediaObject, AITextResponse } from '@/types'
  */
 export async function uploadMedia(file: File): Promise<MediaObject> {
   try {
+    console.log('Starting file upload:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    })
+
     const formData = new FormData()
     formData.append('file', file)
 
@@ -16,12 +22,42 @@ export async function uploadMedia(file: File): Promise<MediaObject> {
     const data = await response.json()
 
     if (!response.ok) {
-      throw new Error(data.error || 'Upload failed')
+      console.error('Upload API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: data.error,
+        details: data.details,
+        type: data.type
+      })
+      
+      // Provide detailed error message based on error type
+      let errorMessage = data.error || 'Upload failed'
+      
+      if (data.details) {
+        errorMessage += `: ${data.details}`
+      }
+      
+      if (data.type === 'cosmic_api_error') {
+        errorMessage = `Cosmic API Error - ${errorMessage}`
+      } else if (data.type === 'network_error') {
+        errorMessage = `Network Error - ${errorMessage}. Please check your internet connection.`
+      } else if (data.type === 'file_processing_error') {
+        errorMessage = `File Processing Error - ${errorMessage}. Please try a different file.`
+      }
+      
+      throw new Error(errorMessage)
     }
 
+    console.log('Upload successful:', data.media.name)
     return data.media as MediaObject
   } catch (error) {
-    console.error('Error uploading media:', error)
+    console.error('Client-side upload error:', {
+      error: error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    // Re-throw with preserved error message for user display
     throw new Error(error instanceof Error ? error.message : 'Failed to upload media')
   }
 }
@@ -34,6 +70,11 @@ export async function analyzeMedia(
   prompt: string
 ): Promise<AITextResponse> {
   try {
+    console.log('Starting media analysis:', {
+      mediaUrl,
+      promptLength: prompt.length
+    })
+
     const response = await fetch('/api/analyze', {
       method: 'POST',
       headers: {
@@ -48,12 +89,25 @@ export async function analyzeMedia(
     const data = await response.json()
 
     if (!response.ok) {
-      throw new Error(data.error || 'Analysis failed')
+      console.error('Analysis API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: data.error,
+        details: data.details
+      })
+      
+      let errorMessage = data.error || 'Analysis failed'
+      if (data.details) {
+        errorMessage += `: ${data.details}`
+      }
+      
+      throw new Error(errorMessage)
     }
 
+    console.log('Analysis successful')
     return data.analysis as AITextResponse
   } catch (error) {
-    console.error('Error analyzing media:', error)
+    console.error('Client-side analysis error:', error)
     throw new Error(error instanceof Error ? error.message : 'Failed to analyze media')
   }
 }
@@ -77,7 +131,18 @@ export async function generateText(prompt: string): Promise<AITextResponse> {
     const data = await response.json()
 
     if (!response.ok) {
-      throw new Error(data.error || 'Text generation failed')
+      console.error('Text generation API error:', {
+        status: response.status,
+        error: data.error,
+        details: data.details
+      })
+      
+      let errorMessage = data.error || 'Text generation failed'
+      if (data.details) {
+        errorMessage += `: ${data.details}`
+      }
+      
+      throw new Error(errorMessage)
     }
 
     return data.analysis as AITextResponse
