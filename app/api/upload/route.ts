@@ -45,13 +45,43 @@ export async function POST(request: NextRequest) {
       size: file.size,
     })
 
-    // Convert Web API File to Node.js compatible format
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    // Enhanced file processing to prevent "e.on is not a function" error
+    let buffer: Buffer
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      buffer = Buffer.from(arrayBuffer)
+      
+      // Validate buffer was created successfully
+      if (!buffer || buffer.length === 0) {
+        throw new Error('Failed to process file: Empty buffer created')
+      }
+
+      // Additional validation for buffer integrity
+      if (buffer.length !== file.size) {
+        console.warn('Buffer size mismatch:', {
+          originalSize: file.size,
+          bufferSize: buffer.length
+        })
+      }
+    } catch (bufferError) {
+      console.error('Buffer creation error:', bufferError)
+      return NextResponse.json(
+        { 
+          error: 'File processing error - unable to read file contents',
+          details: bufferError instanceof Error ? bufferError.message : 'Unknown buffer error',
+          type: 'file_processing_error'
+        },
+        { status: 400 }
+      )
+    }
     
-    // Upload to Cosmic media library using buffer directly
+    // Upload to Cosmic media library with enhanced error handling
     const response = await cosmic.media.insertOne({
-      media: buffer, // Pass buffer directly instead of File object
+      media: {
+        buffer: buffer,
+        originalname: file.name,
+        mimetype: file.type,
+      },
       folder: 'ai-uploads',
       metadata: {
         uploaded_by: 'ai-analyzer',
@@ -108,13 +138,21 @@ export async function POST(request: NextRequest) {
       error.message.includes('FormData') || 
       error.message.includes('e.on is not a function') ||
       error.message.includes('stream') ||
-      error.message.includes('pipe')
+      error.message.includes('pipe') ||
+      error.message.includes('buffer') ||
+      error.message.includes('media must be')
     )) {
       return NextResponse.json(
         { 
           error: 'File processing error - incompatible file format or SDK issue',
-          details: error.message,
-          type: 'file_processing_error'
+          details: `${error.message}. Please try a different file or format.`,
+          type: 'file_processing_error',
+          suggestions: [
+            'Try converting the file to a more common format (JPG, PNG for images)',
+            'Ensure the file is not corrupted',
+            'Try reducing the file size',
+            'Check that the file type is supported'
+          ]
         },
         { status: 400 }
       )
