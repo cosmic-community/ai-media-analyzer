@@ -30,11 +30,6 @@ export async function POST(request: NextRequest) {
 
     // Validate environment variables
     if (!process.env.COSMIC_BUCKET_SLUG || !process.env.COSMIC_READ_KEY || !process.env.COSMIC_WRITE_KEY) {
-      console.error('Missing environment variables:', {
-        bucketSlug: !!process.env.COSMIC_BUCKET_SLUG,
-        readKey: !!process.env.COSMIC_READ_KEY,
-        writeKey: !!process.env.COSMIC_WRITE_KEY
-      })
       return NextResponse.json(
         { 
           error: 'Server configuration error: Missing required environment variables',
@@ -48,38 +43,32 @@ export async function POST(request: NextRequest) {
       name: file.name,
       type: file.type,
       size: file.size,
-      bucketSlug: process.env.COSMIC_BUCKET_SLUG
     })
 
-    // Convert File to Buffer for Cosmic SDK
-    const buffer = Buffer.from(await file.arrayBuffer())
+    // Convert Web API File to Node.js compatible format
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
     
-    // Create a proper file-like object for the Cosmic SDK
-    const fileForUpload = new File([buffer], file.name, {
-      type: file.type,
-    })
-
-    // Upload to Cosmic media library with proper file handling
+    // Upload to Cosmic media library using buffer directly
     const response = await cosmic.media.insertOne({
-      media: fileForUpload,
+      media: buffer, // Pass buffer directly instead of File object
       folder: 'ai-uploads',
       metadata: {
         uploaded_by: 'ai-analyzer',
         upload_timestamp: new Date().toISOString(),
+        original_name: file.name,
+        content_type: file.type,
+        file_size: file.size
       }
     })
 
     console.log('Upload successful:', response.media.name)
+    return NextResponse.json({ media: response.media })
 
-    const media = response.media as MediaObject
-
-    return NextResponse.json({ media })
   } catch (error) {
-    console.error('Detailed upload error:', {
-      error: error,
-      message: error instanceof Error ? error.message : 'Unknown error',
+    console.error('Upload error details:', {
+      error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : undefined,
     })
     
     // Handle Cosmic-specific errors
@@ -114,11 +103,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Handle file processing errors
-    if (error instanceof Error && (error.message.includes('FormData') || error.message.includes('e.on is not a function'))) {
+    // Handle file processing errors (including the "e.on is not a function" error)
+    if (error instanceof Error && (
+      error.message.includes('FormData') || 
+      error.message.includes('e.on is not a function') ||
+      error.message.includes('stream') ||
+      error.message.includes('pipe')
+    )) {
       return NextResponse.json(
         { 
-          error: 'File processing error - invalid file format or corrupted file',
+          error: 'File processing error - incompatible file format or SDK issue',
           details: error.message,
           type: 'file_processing_error'
         },
@@ -129,7 +123,7 @@ export async function POST(request: NextRequest) {
     // Generic error with full details for debugging
     return NextResponse.json(
       { 
-        error: 'Upload failed with server error',
+        error: 'Upload failed',
         details: error instanceof Error ? error.message : 'Unknown error occurred',
         type: 'server_error',
         stack: error instanceof Error ? error.stack : undefined
