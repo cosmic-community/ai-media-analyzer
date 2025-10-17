@@ -26,6 +26,8 @@ module.exports = {
         border: '#e2e8f0',
         background: '#ffffff',
         foreground: '#0f172a',
+        ring: '#3b82f6', // Added missing ring color
+        'ring-offset-background': '#ffffff', // Added missing ring offset color
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
